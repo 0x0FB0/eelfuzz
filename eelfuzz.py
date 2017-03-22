@@ -119,7 +119,7 @@ def main():
 	for req in sample_requests:
 		print "PROTO DEBUG:\n" + str(repr(req[0]))
 		for x in range(0,pldcnt):
-			radamsa = subprocess.Popen(["../radamsa/bin/radamsa", "--seed", str(x)], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
+			radamsa = subprocess.Popen(["./radamsa/bin/radamsa", "--seed", str(x)], stdout=subprocess.PIPE, stdin=subprocess.PIPE)
 			radamsa.stdin.write(str(req[0]))
 			out, err = radamsa.communicate()
 			#print "\033[31mID: %s PAYLOAD:  %s" %( str(x),  base64.b64encode(out)[:2000] + "\033[0m")
