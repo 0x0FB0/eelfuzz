@@ -1,0 +1,3 @@
+[submodule "fuzzmon"]
+	path = fuzzmon
+	url = git@github.com:FooBallZ/eelfuzz.git
