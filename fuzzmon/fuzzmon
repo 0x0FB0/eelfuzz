@@ -1,0 +1,106 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import argparse
+import binascii
+import logging
+import os
+import signal
+import socket
+import sys
+
+from fuzz_proxy.glue import DebuggingHooks
+from fuzz_proxy.monitor import PtraceDbg
+from fuzz_proxy.network import Downstream
+from fuzz_proxy.helpers import socket_type, to_host
+
+
+# Need to have these global for access in the sigint handler
+dbg = None
+server = None
+
+
+def sigint_handler(signal, frame):
+    if dbg is not None:
+        dbg.stop()
+    if server is not None:
+        server.stop()
+    sys.exit(0)
+
+
+def prepare_parser():
+    parser = argparse.ArgumentParser(description="A proxy which monitors the backend application state")
+    parser.add_argument("-p", "--pid", help="Attach running process specified by its identifier", type=int,
+                        default=None)
+    parser.add_argument("-u", "--upstream", help="Upstream server to which to connect. Format is proto:host:port or "
+                                                 "uds:proto:file for Unix Domain Sockets", type=socket_type,
+                        required=True)
+    parser.add_argument("-d", "--downstream", help="IP and port to bind to, or UDS. Format is proto:host:port or "
+                                                   "uds:proto:file. By default, listen to TCP connections on port "
+                                                   "25746", type=socket_type, default="tcp:0.0.0.0:25746")
+    parser.add_argument("-o", "--output", help="Output folder where to store the crash metadata", default="metadata")
+    parser.add_argument("-s", "--session", help="A session identifier for the fuzzing session")
+    parser.add_argument("-f", "--fork", help="Trace fork and child process", action="store_true")
+    parser.add_argument("-e", "--trace-exec", help="Trace execve() event", action="store_true")
+    parser.add_argument("-n", "--no-stdout", help="Use /dev/null as stdout/stderr, or close stdout and stderr if "
+                                                  "/dev/null doesn't exist", action="store_true")
+    parser.add_argument("-c", "--conns", help="Number of downstream connections to accept in parallel. Default is 1",
+                        type=int, default=1)
+    process_control_parser = parser.add_mutually_exclusive_group()
+    process_control_parser.add_argument("-q", "--quit", help="Do not restart the program after a fault is detected. "
+                                                             "Exit cleanly", action="store_true")
+    process_control_parser.add_argument("-w", "--wait", help="How long to wait for before restarting the crashed "
+                                                             "process", type=float, default=10)
+    parser.add_argument("-l", "--log-level", help="Set the debugging level", choices=["DEBUG", "INFO", "WARNING",
+                                                                                      "ERROR", "CRITICAL"],
+                        default="WARNING")
+    parser.add_argument("program", help="The command line to run and attach to", nargs=argparse.REMAINDER)
+    return parser
+
+
+if __name__ == "__main__":
+    parser = prepare_parser()
+    args = parser.parse_args()
+
+    numeric_level = getattr(logging, args.log_level.upper(), None)
+    logging.basicConfig(level=numeric_level)
+
+    if args.pid is None and args.program == []:
+        parser.print_help()
+        parser.exit(2, "ERROR: Missing program or pid (-p)\n")
+    if args.pid is not None and args.program != []:
+        parser.print_help()
+        parser.exit(2, "ERROR: Both program and pid (-p) provided\n")
+
+    if args.quit:
+        args.wait = -1
+
+    if args.session is None:
+        args.session = binascii.hexlify(os.urandom(20))
+
+    try:
+        server_socket = socket.socket(args.downstream[0], args.downstream[1])
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.setblocking(False)
+        server_socket.bind(to_host(args.downstream[2]))
+        server_socket.listen(args.conns)
+        logging.info("Downstream socket listening on %s" % str(to_host(args.downstream[2])))
+    except socket.error as se:
+        parser.exit(2, "Failed to build downstream socket: %s\n" % se)
+
+    try:
+        client_socket = socket.socket(args.upstream[0], args.upstream[1])
+        client_socket.settimeout(1.0)
+        server_address = to_host(args.upstream[2])
+    except socket.error as se:
+        parser.exit(2, "Failed to build upstream socket: %s\n" % se)
+
+    signal.signal(signal.SIGINT, sigint_handler)
+
+    dbg = PtraceDbg(args)
+
+    hooks = DebuggingHooks(dbg, args.session, args.output, args.wait)
+
+    server = Downstream(server_socket, client_socket, server_address, hooks)
+    server.serve(timeout=3)
+    server.stop()
