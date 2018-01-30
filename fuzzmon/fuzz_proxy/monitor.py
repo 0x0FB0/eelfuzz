@@ -10,8 +10,8 @@ import subprocess
 import time
 
 import ptrace.debugger as pdbg
-import ptrace.error as perror
-import ptrace.signames
+from ptrace import error as perror
+from ptrace import signames
 
 crash_signals = (signal.SIGILL, signal.SIGABRT, signal.SIGFPE, signal.SIGBUS, signal.SIGSEGV, signal.SIGSYS)
 

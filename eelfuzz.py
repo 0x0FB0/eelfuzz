@@ -8,8 +8,7 @@ from scapy.all import *
 def decode_proto(pkts):
 	proto_table = list(list())
 	wrpcap("somepcap.cap", pkts)
-	pid = subprocess.Popen(['tshark', '-r', 'somepcap.cap', '-Tfields', '-eframe.protocols'],
-				stdout=subprocess.PIPE)
+	pid = subprocess.Popen(['tshark', '-r', 'somepcap.cap', '-Tfields', '-eframe.protocols'], stdout=subprocess.PIPE)
 	out, err = pid.communicate()
 	#print "DEBUG: %s" % out
 	req_table = out.split('\n')
@@ -80,7 +79,7 @@ def main():
 	arguments = ""
 	pktcount = 3
 	pid = 0
-	pldcnt = 9000000
+	pldcnt = 10
 
 	try:
 		for o, a in opts:

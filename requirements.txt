@@ -1,0 +1,3 @@
+ptrace==1.0.1
+scapy==2.3.3
+setuptools==36.2.7

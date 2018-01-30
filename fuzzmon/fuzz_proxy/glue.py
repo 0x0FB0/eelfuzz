@@ -10,7 +10,9 @@ except ImportError:
 import time
 import threading
 
-import ptrace.error as perror
+from ptrace import error as perror
+#import ptrace
+#perror = ptrace.error
 
 import fuzz_proxy.helpers as fuzzhelp
 import fuzz_proxy.monitor as fuzzmon
